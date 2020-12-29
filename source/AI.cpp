@@ -488,7 +488,7 @@ void AI::ClearOrders()
 
 
 
-void AI::Step(const PlayerInfo &player, Command &activeCommands)
+void AI::Step(const PlayerInfo &player, list<Command> &activeCommands)
 {
 	// First, figure out the comparative strengths of the present governments.
 	const System *playerSystem = player.GetSystem();
@@ -529,16 +529,17 @@ void AI::Step(const PlayerInfo &player, Command &activeCommands)
 		if(!it->GetSystem())
 			continue;
 		
+		//TODO: have a single case that handles all player-controlled ships
 		if(it.get() == flagship)
 		{
-			MovePlayer(*it, player, activeCommands);
+			MovePlayer(*it, player, *activeCommands.begin());
 			continue;
 		}
 		//If the ship is the wingman and in the same system as the flagship and is not destroyed, run MoveWingman
 		//TODO: Only run the following if wingman AI is toggled off
 		if (it.get() == wingman && !it->IsDestroyed() && it->GetSystem() == flagship->GetSystem())
 		{
-			MoveWingman(*it, player, activeCommands);
+			MoveWingman(*it, player, *next(activeCommands.begin(), 1));
 			continue;
 		}
 		

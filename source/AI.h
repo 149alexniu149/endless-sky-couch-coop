@@ -64,7 +64,7 @@ template <class Type>
 	// but not when they jump from one system to another.
 	void ClearOrders();
 	// Issue AI commands to all ships for one game step.
-	void Step(const PlayerInfo &player, Command &activeCommands);
+	void Step(const PlayerInfo &player, std::list<Command> &activeCommands);
 	
 	// Get the in-system strength of each government's allies and enemies.
 	int64_t AllyStrength(const Government *government);

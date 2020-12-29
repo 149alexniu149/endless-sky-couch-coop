@@ -196,7 +196,8 @@ Engine::Engine(PlayerInfo &player)
 	shipCollisions(256u, 32u)
 {
 	zoom = Preferences::ViewZoom();
-	
+	activeCommands.push_back(Command());
+
 	// Start the thread for doing calculations.
 	calcThread = thread(&Engine::ThreadEntryPoint, this);
 	
@@ -474,10 +475,11 @@ void Engine::Step(bool isActive)
 		HandleKeyboardInputs();
 		// Ignore any inputs given when first becoming active, since those inputs
 		// were issued when some other panel (e.g. planet, hail) was displayed.
+		// just handle flagship commands here, wingmen will be handled elsewhere
 		if(!wasActive)
-			activeCommands.Clear();
+			(*activeCommands.begin()).Clear();
 		else
-			ai.UpdateKeys(player, activeCommands);
+			ai.UpdateKeys(player, (*activeCommands.begin()));
 	}
 	wasActive = isActive;
 	Audio::Update(center);
@@ -1050,7 +1052,10 @@ void Engine::Draw() const
 // Give an (automated/scripted) command on behalf of the player.
 void Engine::GiveCommand(const Command &command)
 {
-	activeCommands.Set(command);
+	//Iterate over command sets for all controllable ships
+	for(auto it = activeCommands.begin(); it != activeCommands.end(); ++it){
+		(*it).Set(command);
+	}
 }
 
 
@@ -1277,12 +1282,14 @@ void Engine::CalculateStep()
 	
 	if(!player.GetSystem())
 		return;
-	
+
 	// Now, all the ships must decide what they are doing next.
 	ai.Step(player, activeCommands);
 	
 	// Clear the active players commands, they are all processed at this point.
-	activeCommands.Clear();
+	for (auto it = activeCommands.begin(); it != activeCommands.end(); ++it){
+		(*it).Clear();
+	}
 	
 	// Perform actions for all the game objects. In general this is ordered from
 	// bottom to top of the draw stack, but in some cases one object type must
@@ -1727,49 +1734,53 @@ void Engine::HandleKeyboardInputs()
 	Command oldHeld = keyHeld;
 	keyHeld.ReadKeyboard();
 	Command keyDown = keyHeld.AndNot(oldHeld);
-	
-	// Certain commands are always sent when the corresponding key is depressed.
-	static const Command manueveringCommands = Command::AFTERBURNER | Command::BACK |
-		Command::FORWARD | Command::LEFT | Command::RIGHT; 
-		
-	static const Command wingmanManuevers = Command::WAFTERBURNER | Command::WBACK |
-		Command::WFORWARD | Command::WLEFT | Command::WRIGHT;
-	
-	// Transfer all commands that need to be active as long as the corresponding key is pressed.
-	activeCommands |= keyHeld.And(Command::PRIMARY | Command::SECONDARY | Command::SCAN |
-		manueveringCommands | Command::SHIFT | wingmanManuevers | Command::WPRIMARY | Command::WSECONDARY);
-	
-	// Issuing LAND again within the cooldown period signals a change of landing target.
-	constexpr int landCooldown = 60;
-	++landKeyInterval;
-	if(oldHeld.Has(Command::LAND))
-		landKeyInterval = 0;
-	
-	// If all previously-held maneuvering keys have been released,
-	// restore any autopilot commands still being requested.
-	if(!keyHeld.Has(manueveringCommands) && oldHeld.Has(manueveringCommands))
-	{
-		activeCommands |= keyHeld.And(Command::JUMP | Command::BOARD | Command::LAND);
-		
-		// Do not switch landing targets when restoring autopilot.
-		landKeyInterval = landCooldown;
-	}
-	
-	// If holding JUMP or toggling LAND, also send WAIT. This prevents the jump from
-	// starting (e.g. while escorts are aligning), or switches the landing target.
-	if(keyHeld.Has(Command::JUMP) || (keyHeld.Has(Command::LAND) && landKeyInterval < landCooldown))
-		activeCommands |= Command::WAIT;
-	
-	// Transfer all newly pressed, unhandled keys to active commands.
-	activeCommands |= keyDown;
 
-	// Translate shift+BACK to a command to a STOP command to stop all movement of the flagship.
-	// Translation is done here to allow the autopilot (which will execute the STOP-command) to
-	// act on a single STOP command instead of the shift+BACK modifier).
-	if(keyHeld.Has(Command::BACK) && keyHeld.Has(Command::SHIFT))
-	{
-		activeCommands |= Command::STOP;
-		activeCommands.Clear(Command::BACK);
+	//iterate over all command settings
+	for(auto it = activeCommands.begin(); it != activeCommands.end(); ++it){
+
+		// Certain commands are always sent when the corresponding key is depressed.
+		static const Command manueveringCommands = Command::AFTERBURNER | Command::BACK |
+			Command::FORWARD | Command::LEFT | Command::RIGHT; 
+			
+		static const Command wingmanManuevers = Command::WAFTERBURNER | Command::WBACK |
+			Command::WFORWARD | Command::WLEFT | Command::WRIGHT; 
+		
+		// Transfer all commands that need to be active as long as the corresponding key is pressed.
+		(*it) |= keyHeld.And(Command::PRIMARY | Command::SECONDARY | Command::SCAN |
+			manueveringCommands | Command::SHIFT | wingmanManuevers | Command::WPRIMARY | Command::WSECONDARY);
+		
+		// Issuing LAND again within the cooldown period signals a change of landing target.
+		constexpr int landCooldown = 60;
+		++landKeyInterval;
+		if(oldHeld.Has(Command::LAND))
+			landKeyInterval = 0;
+		
+		// If all previously-held maneuvering keys have been released,
+		// restore any autopilot commands still being requested.
+		if(!keyHeld.Has(manueveringCommands) && oldHeld.Has(manueveringCommands))
+		{
+			(*it) |= keyHeld.And(Command::JUMP | Command::BOARD | Command::LAND);
+			
+			// Do not switch landing targets when restoring autopilot.
+			landKeyInterval = landCooldown;
+		}
+		
+		// If holding JUMP or toggling LAND, also send WAIT. This prevents the jump from
+		// starting (e.g. while escorts are aligning), or switches the landing target.
+		if(keyHeld.Has(Command::JUMP) || (keyHeld.Has(Command::LAND) && landKeyInterval < landCooldown))
+			(*it) |= Command::WAIT;
+		
+		// Transfer all newly pressed, unhandled keys to active commands.
+		(*it) |= keyDown;
+
+		// Translate shift+BACK to a command to a STOP command to stop all movement of the flagship.
+		// Translation is done here to allow the autopilot (which will execute the STOP-command) to
+		// act on a single STOP command instead of the shift+BACK modifier).
+		if(keyHeld.Has(Command::BACK) && keyHeld.Has(Command::SHIFT))
+		{
+			(*it) |= Command::STOP;
+			(*it).Clear(Command::BACK);
+		}
 	}
 }
 
@@ -1781,6 +1792,7 @@ void Engine::HandleMouseClicks()
 {
 	// Mouse clicks can't be issued if your flagship is dead.
 	Ship *flagship = player.Flagship();
+
 	if(!doClick || !flagship)
 		return;
 	
@@ -1804,7 +1816,7 @@ void Engine::HandleMouseClicks()
 									+ " refuse to let you land.");
 						else
 						{
-							activeCommands |= Command::LAND;
+							(*activeCommands.begin()) |= Command::LAND;
 							Messages::Add("Landing on " + planet->Name() + ".");
 						}
 					}
@@ -1841,7 +1853,7 @@ void Engine::HandleMouseClicks()
 		{
 			// Left click: has your flagship select or board the target.
 			if(clickTarget == flagship->GetTargetShip())
-				activeCommands |= Command::BOARD;
+				(*activeCommands.begin()) |= Command::BOARD;
 			else
 			{
 				flagship->SetTargetShip(clickTarget);

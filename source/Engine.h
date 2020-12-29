@@ -210,8 +210,9 @@ private:
 	bool hadHostiles = false;
 	
 	// Commands that are currently active (and not yet handled). This is a combination
-	// of keyboard and mouse commands (and any other available input device).
-	Command activeCommands;
+	// of keyboard and mouse commands (and any other available input device). There should be one set of active commands per player controllable ship
+	std::list<Command> activeCommands;
+
 	// Keyboard commands that were active in the previous step.
 	Command keyHeld;
 	// Pressing "land" rapidly toggles targets; pressing it once re-engages landing.
